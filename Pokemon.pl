@@ -191,7 +191,7 @@ debil_contra(P, TipoAtaque) :- tipo(P, TipoDefensa), fuerte_contra(TipoAtaque, T
 
 % DOBLE DEBILIDAD (x4 daño, ambos tipos vulnerables al mismo ataque)
 doblemente_debil(P, TipoAtaque) :-
-    tipo(P, Tipo1), tipo(P, Tipo2), Tipo1 \= Tipo2,
+    tipo(P, Tipo1), tipo(P, Tipo2), Tipo1 @< Tipo2, 
     fuerte_contra(TipoAtaque, Tipo1), fuerte_contra(TipoAtaque, Tipo2).
 
 % ENTRENADOR VULNERABLE (tiene al menos un pokemon debil contra TipoAtaque)
@@ -267,11 +267,19 @@ bucle_chat :-
 
 procesar_consulta(Frase, Respuesta) :-
     string_lower(Frase, FraseMinus),
-    split_string(FraseMinus, " ", " ,?", TokenStr),
+    split_string(FraseMinus, " ", " ,?()¿!", TokenStr),
     maplist(atom_string, Tokens, TokenStr),
     interpretar(Tokens, Respuesta).
 
-% REGLA 1 NEGACION: ENTRENADOR NO TIENE UN POKEMON
+% Detecta la palabra clave de debilidad en singular, plural, con/sin tilde
+
+tiene_palabra_debil(Tokens) :-
+    member(T, Tokens),
+    atom_length(T, L), L >= 5,
+    sub_atom(T, 0, 5, _, Prefijo),
+    (Prefijo == debil ; Prefijo == 'débil').
+
+% REGLA 1 ENTRENADOR NO TIENE UN POKEMON
 interpretar(Tokens, Respuesta) :-
     member(no, Tokens),
     member(tiene, Tokens),
@@ -283,7 +291,7 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "Eso es falso, ~w si tiene a ~w", [Entrenador, Pokemon])
     ).
 
-% REGLA 2 BOOLEANO: UN ENTRENADOR TIENE UN POKEMON ESPECIFICO
+% REGLA 2 UN ENTRENADOR TIENE UN POKEMON ESPECIFICO
 interpretar(Tokens, Respuesta) :-
     member(tiene, Tokens),
     member(Entrenador, Tokens), entrenador(Entrenador),
@@ -304,7 +312,7 @@ interpretar(Tokens, Respuesta) :-
     findall(P, (tiene(Entrenador, P), tipo(P, Tipo)), Pokemones),
     format(string(Respuesta), "El entrenador ~w tiene estos pokemon de tipo ~w: ~w", [Entrenador, Tipo, Pokemones]).
 
-% REGLA 4 DUEÑO/ENTRENADOR DE UN POKEMON (pregunta abierta)
+% REGLA 4 DUEÑO/ENTRENADOR DE UN POKEMON 
 interpretar(Tokens, Respuesta) :-
     (member('dueño', Tokens) ; member(entrenador, Tokens) ; member(quien, Tokens)),
     member(Pokemon, Tokens),
@@ -315,7 +323,7 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "No existe un dueño registrado para ~w", [Pokemon])
     ).
 
-% REGLA 5 TODOS LOS POKEMON DE UN ENTRENADOR (sin filtro)
+% REGLA 5 TODOS LOS POKEMON DE UN ENTRENADOR 
 interpretar(Tokens, Respuesta) :-
     member(tiene, Tokens),
     member(Entrenador, Tokens),
@@ -324,7 +332,7 @@ interpretar(Tokens, Respuesta) :-
     findall(P, tiene(Entrenador, P), Pokemones),
     format(string(Respuesta), "El entrenador ~w tiene a los siguientes pokemon: ~w", [Entrenador, Pokemones]).
 
-% REGLA 6 POKEMON QUE COMPARTEN UN TIPO CON OTRO (self-join)
+% REGLA 6 POKEMON QUE COMPARTEN UN TIPO CON OTRO 
 interpretar(Tokens, Respuesta) :-
     (member(comparte, Tokens) ; member(otro, Tokens)),
     member(tipo, Tokens),
@@ -334,19 +342,10 @@ interpretar(Tokens, Respuesta) :-
     list_to_set(Lista, Otros),
     format(string(Respuesta), "Pokemon que comparten un tipo con ~w: ~w", [Pokemon, Otros]).
 
-% REGLA 7 TIPO DE UN POKEMON
+% REGLA 8 DOBLEMENTE DEBIL CONTRA UN TIPO (RESPUESTA BOOLEANA)
 interpretar(Tokens, Respuesta) :-
-    member(tipo, Tokens),
-    member(Pokemon, Tokens),
-    pokemon(Pokemon),
-    !,
-    findall(T, tipo(Pokemon, T), Tipos),
-    format(string(Respuesta), "El pokemon ~w es de tipo: ~w", [Pokemon, Tipos]).
-
-% REGLA 8 DOBLE DEBILIDAD BOOLEANA 
-interpretar(Tokens, Respuesta) :-
-    member(doblemente, Tokens),
-    (member(debil, Tokens) ; member('débil', Tokens)),
+    (member(doblemente, Tokens);member(doble, Tokens)),
+    tiene_palabra_debil(Tokens),
     member(Pokemon, Tokens), pokemon(Pokemon),
     member(Tipo, Tokens), (fuerte_contra(Tipo, _) ; fuerte_contra(_, Tipo)),
     !,
@@ -355,26 +354,26 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "No, ~w no es doblemente debil contra ~w", [Pokemon, Tipo])
     ).
 
-% REGLA 9 DOBLE DEBILIDAD CONTRA UN TIPO 
+% REGLA 9 DOBLE DEBILIDAD CONTRA UN TIPO (RESPUESTA ABIERTA)
 interpretar(Tokens, Respuesta) :-
     member(doblemente, Tokens),
-    (member(debil, Tokens) ; member('débil', Tokens)),
+    tiene_palabra_debil(Tokens),
     member(Tipo, Tokens), (fuerte_contra(Tipo, _) ; fuerte_contra(_, Tipo)),
     !,
     findall(P, doblemente_debil(P, Tipo), Pokemones),
     format(string(Respuesta), "Los pokemon doblemente debiles contra ~w son: ~w", [Tipo, Pokemones]).
 
-% REGLA 10 DOBLE DEBILIDAD TOTALMENTE ABIERTA 
+% REGLA 10 DOBLE DEBILIDAD PARA TODO POKEMON
 interpretar(Tokens, Respuesta) :-
     member(doblemente, Tokens),
-    (member(debil, Tokens) ; member('débil', Tokens)),
+    tiene_palabra_debil(Tokens),
     !,
     findall(P-T, doblemente_debil(P, T), Pares),
     format(string(Respuesta), "Pares pokemon-tipo doblemente debiles: ~w", [Pares]).
 
-% REGLA 11 DEBILIDAD BOOLEANA 
+% REGLA 11 DEBILIDAD DE UN POKEMON (RESPUESTA BOOLEANA)
 interpretar(Tokens, Respuesta) :-
-    (member(debil, Tokens) ; member('débil', Tokens)),
+    tiene_palabra_debil(Tokens),
     member(Pokemon, Tokens), pokemon(Pokemon),
     member(Tipo, Tokens), (fuerte_contra(Tipo, _) ; fuerte_contra(_, Tipo)),
     !,
@@ -383,24 +382,24 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "No, ~w no es debil contra ~w", [Pokemon, Tipo])
     ).
 
-% REGLA 12 DEBILIDADES CONTRA UN TIPO 
+% REGLA 12 DEBILIDADES CONTRA UN TIPO (RESPUESTA ABIERTA)
 interpretar(Tokens, Respuesta) :-
-    (member(debil, Tokens) ; member('débil', Tokens)),
+    tiene_palabra_debil(Tokens),
     member(Tipo, Tokens),
     (fuerte_contra(Tipo, _) ; fuerte_contra(_, Tipo)),
     !,
     findall(P, debil_contra(P, Tipo), Pokemones),
     format(string(Respuesta), "Los pokemon debiles contra el tipo ~w son: ~w", [Tipo, Pokemones]).
 
-% REGLA 13 CONTRA QUE TIPOS ES DEBIL UN POKEMON 
+% REGLA 13 CONTRA QUE TIPOS ES DEBIL UN POKEMON (RESPUESTA ABIERTA)
 interpretar(Tokens, Respuesta) :-
-    (member(debil, Tokens) ; member('débil', Tokens)),
+    tiene_palabra_debil(Tokens),
     member(Pokemon, Tokens), pokemon(Pokemon),
     !,
     findall(T, debil_contra(Pokemon, T), Tipos),
     format(string(Respuesta), "~w es debil contra los tipos: ~w", [Pokemon, Tipos]).
 
-% REGLA 13B FUERTE CONTRA - BOOL
+% REGLA 13.2 FUERTE CONTRA (RESPUESTA BOOLEANA)
 interpretar(Tokens, Respuesta) :-
     member(fuerte, Tokens),
     findall(T, (member(T, Tokens), (fuerte_contra(T, _) ; fuerte_contra(_, T))), TiposEncontrados),
@@ -411,7 +410,7 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "No, ~w no es fuerte contra ~w", [Tipo1, Tipo2])
     ).
 
-% REGLA 13C FUERTE CONTRA - UN SOLO TIPO 
+% REGLA 13.3 FUERTE CONTRA (RESPUESTA ABIERTA)
 interpretar(Tokens, Respuesta) :-
     member(fuerte, Tokens),
     member(Tipo, Tokens), (fuerte_contra(Tipo, _) ; fuerte_contra(_, Tipo)),
@@ -432,6 +431,16 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "No, el entrenador ~w no presenta vulnerabilidad directa a ese tipo", [Entrenador])
     ).
 
+% REGLA 14.2: A QUE TIPOS DE ATAQUE ES VULNERABLE UN ENTRENADOR (Consulta 16)
+interpretar(Tokens, Respuesta) :-
+    member(vulnerable, Tokens),
+    member(Entrenador, Tokens),
+    entrenador(Entrenador),
+    !,
+    findall(T, entrenador_vulnerable(Entrenador, T), TiposRaw),
+    list_to_set(TiposRaw, Tipos),
+    format(string(Respuesta), "El entrenador ~w es vulnerable a los tipos de ataque: ~w", [Entrenador, Tipos]).
+
 % REGLA 15 VENTAJA ENTRE DOS POKEMON
 interpretar(Tokens, Respuesta) :-
     (member(ventaja, Tokens) ; member(ganarle, Tokens)),
@@ -446,7 +455,7 @@ interpretar(Tokens, Respuesta) :-
     ;   format(string(Respuesta), "No, ~w no tiene ventaja directa sobre ~w", [P1, P2])
     ).
 
-% REGLA 16 QUE POKEMON TIENEN VENTAJA SOBRE UNO DADO
+% REGLA 16 QUE POKEMON TIENEN VENTAJA SOBRE UNO DADO (RESPUESTA ABIERTA)
 interpretar(Tokens, Respuesta) :-
     (member(ventaja, Tokens) ; member(ganarle, Tokens)),
     (member(contra, Tokens) ; member(sobre, Tokens)),
@@ -456,11 +465,47 @@ interpretar(Tokens, Respuesta) :-
     findall(P, tiene_ventaja(P, Pokemon), Pokemones),
     format(string(Respuesta), "Los pokemon con ventaja sobre ~w son: ~w", [Pokemon, Pokemones]).
 
+% REGLA 13.4 TIPO DE UN POKEMON (se evalua de ultima para no tapar otras reglas con la palabra 'tipo')
+interpretar(Tokens, Respuesta) :-
+    (member(tipo, Tokens);member(tipos, Tokens)),
+    member(Pokemon, Tokens),
+    pokemon(Pokemon),
+    !,
+    findall(T, tipo(Pokemon, T), Tipos),
+    format(string(Respuesta), "El pokemon ~w es de tipo: ~w", [Pokemon, Tipos]).
+
 % REGLA 17 SALUDO
 interpretar(Tokens, Respuesta) :-
     (member(hola, Tokens) ; member(buenas, Tokens)),
     !,
     Respuesta = "Hola! Preguntame por entrenadores, tipos, debilidades o ventajas de los pokemon.".
+
+% REGLA 18 ES POKEMON
+interpretar(Tokens, Respuesta) :-
+    member(es, Tokens),
+    member(Pokemon, Tokens), pokemon(Pokemon),
+    !,
+    (   pokemon(Pokemon)
+    ->  format(string(Respuesta), "Si, ~w es un Pokemon", [Pokemon])
+    ;   format(string(Respuesta), "No, ~w no es un Pokemon", [Pokemon])
+    ).
+
+% REGLA 19: QUE POKEMON SON DE UN TIPO ESPECIFICO 
+interpretar(Tokens, Respuesta) :-
+    (member(tipo, Tokens);member(tipos, Tokens)),
+    member(Tipo, Tokens), (fuerte_contra(Tipo, _) ; fuerte_contra(_, Tipo)),
+    \+ member(tiene, Tokens), 
+    !,
+    findall(P, tipo(P, Tipo), PokemonesRaw),
+    list_to_set(PokemonesRaw, Pokemones),
+    format(string(Respuesta), "Los pokemon de tipo ~w son: ~w", [Tipo, Pokemones]).
+
+% REGLA 20: TODOS LOS PARES POKEMON-TIPO REGISTRADOS 
+interpretar(Tokens, Respuesta) :-
+    member(pares, Tokens),
+    !,
+    findall(P-T, tipo(P, T), Pares),
+    format(string(Respuesta), "Los pares pokemon-tipo registrados son: ~w", [Pares]).
 
 % RESPUESTA POR DEFECTO
 interpretar(_, 'No logro entender tu pregunta :(. Prueba preguntando por tipos, quien tiene a un pokemon, o debilidades.').
