@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Chatbot Pokémon</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
+    #chat { border: 1px solid #ccc; height: 400px; overflow-y: auto; padding: 10px; }
+    .usuario { text-align: right; color: #074ea5; }
+    .bot { color: #292828; }
+  </style>
+</head>
+<body>
+  <h1>Chatbot Pokémon</h1>
+  <div id="chat"></div>
+  <input id="pregunta" placeholder="Escribe tu pregunta..." style="width:80%">
+  <button onclick="enviar()">Enviar</button>
+
+  <script>
+    async function enviar() {
+      const input = document.getElementById("pregunta");
+      const chat = document.getElementById("chat");
+      const pregunta = input.value;
+      input.value = "";
+      chat.innerHTML += `<p class="usuario">${pregunta}</p>`;
+
+      const r = await fetch("/preguntar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pregunta })
+      });
+      const datos = await r.json();
+      chat.innerHTML += `<p class="bot">${datos.respuesta}</p>`;
+      chat.scrollTop = chat.scrollHeight;
+    }
+  </script>
+</body>
+</html>
